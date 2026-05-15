@@ -1,0 +1,87 @@
+{
+  "theme": "Light",
+  "archetype": "4 (Swiss & High-Contrast)",
+  "language": "Spanish",
+  "typography": {
+    "fonts": {
+      "headings": "Cabinet Grotesk",
+      "body": "Inter",
+      "mono": "JetBrains Mono"
+    },
+    "hierarchy": {
+      "h1": "text-4xl sm:text-5xl lg:text-6xl tracking-tighter font-black",
+      "h2": "text-2xl sm:text-3xl lg:text-4xl tracking-tight font-bold",
+      "h3": "text-xl sm:text-2xl tracking-tight font-bold",
+      "h4": "text-lg sm:text-xl font-semibold",
+      "body": "text-base leading-relaxed",
+      "small": "text-sm",
+      "overline": "uppercase text-xs tracking-[0.2em] font-bold"
+    }
+  },
+  "colors": {
+    "background": {
+      "main": "#FAFAFA",
+      "surface": "#FFFFFF",
+      "overlay": "rgba(0, 0, 0, 0.5)"
+    },
+    "text": {
+      "primary": "#111111",
+      "secondary": "#555555",
+      "disabled": "#A1A1AA"
+    },
+    "brand": {
+      "primary": "#002fa7", 
+      "accent": "#FF3333",
+      "warning": "#FFD700"
+    },
+    "borders": {
+      "default": "#E4E4E7",
+      "focus": "#002fa7"
+    }
+  },
+  "spacing_and_layout": {
+    "philosophy": "Dense and compact for POS and Dashboard, but generous p-6 to p-8 for setup wizard and standalone forms.",
+    "bento_grid": "Control Room Grid: grid-cols-1 md:grid-cols-3 lg:grid-cols-4 with gap-4 or gap-6. Dense data visibility.",
+    "container_padding": "p-6 or p-8 for borders to prevent text collision."
+  },
+  "surfaces": {
+    "pos_interface": "Grid Borders (The Technical Look). Exposed skeleton. border-collapse with border-r border-b border-border/40.",
+    "dashboard_cards": "Flat background, 1px subtle border (border-border), no shadow. Hover: slight lift (-translate-y-1), subtle shadow.",
+    "header": "Solid Background with a hard bottom border for dashboard. Not glass for POS to ensure max performance and clarity.",
+    "modals": "Flat solid background with hard 1px border. No glassmorphism to keep it fast and functional."
+  },
+  "components": {
+    "buttons": "Sharp edges, flat background. No soft radius. primary CTA in International Klein Blue.",
+    "inputs": "Shadcn UI Input heavily customized. Flat, 1px solid border, 0px border radius (or max 4px).",
+    "tables": "Shadcn Tables. High density, alternating row colors (subtle) for large catalogs.",
+    "pos_grid": "CSS Grid for products. Fast touch targets. min-h-[100px] per item.",
+    "icons": "lucide-react for general icons, @phosphor-icons/react for dense dashboard metrics."
+  },
+  "media": {
+    "images": [
+      {
+        "category": "login_background",
+        "url": "https://static.prod-images.emergentagent.com/jobs/4684dcc8-0062-41d7-a29b-555bb26ff1d9/images/c7bcca872c3a995af4af88bd0923ca01522900b405d57393f7bf010fa853c16a.png",
+        "description": "Subtle, elegant abstract geometric background in light grey and white. Minimalist, swiss design, high contrast for login screen."
+      }
+    ]
+  },
+  "motion": {
+    "hover_states": "Crisp background color change and border darkening. Scale up very slightly for POS product buttons.",
+    "transitions": "Fast, max 150ms. transition: transform 0.15s ease, background-color 0.15s ease",
+    "modals": "Fade in with slight scale up (0.95 -> 1)"
+  },
+  "accessibility": {
+    "contrast": "Ensure minimum 4.5:1 contrast for all text. Especially for POS under bright lights.",
+    "focus": "focus:ring-2 focus:ring-[#002fa7] focus:outline-none",
+    "testing_attributes": "All interactive elements MUST include data-testid (e.g., data-testid='pos-checkout-button')"
+  },
+  "instructions_to_main_agent": [
+    "Ensure all components use .js / .jsx file extensions.",
+    "Use pure HTML + Tailwind for structural layouts like POS screen, use Shadcn for interactive logic (Dialogs, Selects, Tables).",
+    "Implement multi-tenant architecture logic clearly in context or state.",
+    "Make POS layout extremely touch-friendly on mobile/tablet (min 48px hit areas).",
+    "Use data-testid on all key interactive elements.",
+    "Ensure all text is in Spanish (e.g., Vendedor, Bodeguero, Facturación Electrónica)."
+  ]
+}
