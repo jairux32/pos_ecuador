@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import Layout from "../components/Layout";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
@@ -7,9 +7,10 @@ import { Badge } from "../components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../components/ui/table";
-import { Package, Plus, Search, Edit2, Trash2, AlertTriangle, ArrowUpDown } from "lucide-react";
+import { Package, Plus, Search, Edit2, Trash2, AlertTriangle, ArrowUpDown, Upload, Download, Camera } from "lucide-react";
 import api, { formatApiError } from "../lib/api";
 import { toast } from "sonner";
+import BarcodeScanner from "../components/BarcodeScanner";
 
 export default function InventoryPage() {
   const [products, setProducts] = useState([]);
@@ -27,6 +28,9 @@ export default function InventoryPage() {
   const [units, setUnits] = useState([]);
   const [ivaRates, setIvaRates] = useState([]);
   const [adjustReasons, setAdjustReasons] = useState([]);
+  const [scannerOpen, setScannerOpen] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const fileInputRef = useRef(null);
 
   const [form, setForm] = useState({
     nombre: "", codigo_interno: "", codigo_barras: "", descripcion: "",
@@ -143,6 +147,45 @@ export default function InventoryPage() {
     } catch (e) { toast.error(formatApiError(e.response?.data?.detail)); }
   };
 
+  const handleBarcodeScan = (code) => {
+    setScannerOpen(false);
+    setSearch(code);
+    setPage(1);
+    toast.success(`Código escaneado: ${code}`);
+  };
+
+  const handleImport = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setImporting(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const res = await api.post("/inventory/import-csv", formData, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
+      toast.success(res.data.message);
+      if (res.data.errors?.length > 0) {
+        toast.error(`Errores: ${res.data.errors.slice(0, 3).join("; ")}`);
+      }
+      loadProducts();
+    } catch (e) {
+      toast.error(formatApiError(e.response?.data?.detail));
+    } finally {
+      setImporting(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
+
+  const downloadTemplate = async () => {
+    try {
+      const res = await api.get("/inventory/export-template", { responseType: "blob" });
+      const url = URL.createObjectURL(new Blob([res.data]));
+      const a = document.createElement("a"); a.href = url; a.download = "plantilla_productos.xlsx"; a.click();
+      URL.revokeObjectURL(url);
+    } catch { toast.error("Error descargando plantilla"); }
+  };
+
   return (
     <Layout>
       <div data-testid="inventory-page" className="space-y-4">
@@ -151,9 +194,18 @@ export default function InventoryPage() {
             <h1 className="text-2xl font-black tracking-tight text-[#111]">Inventario</h1>
             <p className="text-sm text-[#555]">{total} productos</p>
           </div>
-          <Button data-testid="add-product-btn" onClick={openCreate} className="rounded-none bg-[#002fa7] hover:bg-[#001f7a] gap-2">
-            <Plus className="w-4 h-4" /> Nuevo Producto
-          </Button>
+          <div className="flex items-center gap-2 flex-wrap">
+            <input ref={fileInputRef} type="file" accept=".csv,.xlsx,.xls" onChange={handleImport} className="hidden" />
+            <Button data-testid="download-template-btn" variant="outline" size="sm" onClick={downloadTemplate} className="rounded-none gap-1 text-xs">
+              <Download className="w-3 h-3" /> Plantilla
+            </Button>
+            <Button data-testid="import-products-btn" variant="outline" size="sm" onClick={() => fileInputRef.current?.click()} disabled={importing} className="rounded-none gap-1 text-xs">
+              <Upload className="w-3 h-3" /> {importing ? "Importando..." : "Importar"}
+            </Button>
+            <Button data-testid="add-product-btn" onClick={openCreate} className="rounded-none bg-[#002fa7] hover:bg-[#001f7a] gap-2">
+              <Plus className="w-4 h-4" /> Nuevo Producto
+            </Button>
+          </div>
         </div>
 
         <div className="flex flex-col sm:flex-row gap-3">
@@ -167,6 +219,9 @@ export default function InventoryPage() {
               onChange={(e) => { setSearch(e.target.value); setPage(1); }}
             />
           </div>
+          <Button data-testid="scan-barcode-btn" variant="outline" onClick={() => setScannerOpen(true)} className="rounded-none gap-2">
+            <Camera className="w-4 h-4" /> Escanear
+          </Button>
           <Select value={categoryFilter} onValueChange={(v) => { setCategoryFilter(v === "all" ? "" : v); setPage(1); }}>
             <SelectTrigger data-testid="category-filter" className="w-[180px] rounded-none border-[#E4E4E7]"><SelectValue placeholder="Categoría" /></SelectTrigger>
             <SelectContent>
@@ -354,6 +409,8 @@ export default function InventoryPage() {
             )}
           </DialogContent>
         </Dialog>
+
+        <BarcodeScanner open={scannerOpen} onClose={() => setScannerOpen(false)} onScan={handleBarcodeScan} />
       </div>
     </Layout>
   );

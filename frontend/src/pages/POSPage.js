@@ -8,10 +8,12 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../components/
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
 import {
   Search, ShoppingCart, Plus, Minus, Trash2, DollarSign, CreditCard,
-  ArrowRightLeft, X, Banknote, Calculator, Lock, Unlock
+  ArrowRightLeft, X, Banknote, Calculator, Lock, Unlock, Camera
 } from "lucide-react";
 import api, { formatApiError } from "../lib/api";
 import { toast } from "sonner";
+import BarcodeScanner from "../components/BarcodeScanner";
+import { savePendingSale, getCachedProducts, cacheProducts } from "../lib/offlineDb";
 
 export default function POSPage() {
   const { user } = useAuth();
@@ -34,8 +36,29 @@ export default function POSPage() {
   const [tipoDocumento, setTipoDocumento] = useState("ninguno");
   const [pagos, setPagos] = useState([{ metodo: "efectivo", monto: "", referencia: "" }]);
   const [processing, setProcessing] = useState(false);
+  const [scannerOpen, setScannerOpen] = useState(false);
+  const [isOnline, setIsOnline] = useState(navigator.onLine);
 
   const branchId = user?.branch_ids?.[0] || "";
+
+  useEffect(() => {
+    const goOnline = () => setIsOnline(true);
+    const goOffline = () => setIsOnline(false);
+    window.addEventListener("online", goOnline);
+    window.addEventListener("offline", goOffline);
+    return () => { window.removeEventListener("online", goOnline); window.removeEventListener("offline", goOffline); };
+  }, []);
+
+  useEffect(() => {
+    // Cache products for offline use
+    const cacheAll = async () => {
+      try {
+        const res = await api.get("/inventory/products?limit=500");
+        await cacheProducts(res.data.products || []);
+      } catch {}
+    };
+    if (isOnline) cacheAll();
+  }, [isOnline]);
 
   useEffect(() => {
     const loadRegister = async () => {
@@ -51,10 +74,21 @@ export default function POSPage() {
   const searchProducts = useCallback(async (q) => {
     if (!q || q.length < 2) { setProducts([]); return; }
     try {
-      const res = await api.get(`/inventory/products?search=${encodeURIComponent(q)}&limit=10`);
-      setProducts(res.data.products || []);
-    } catch (e) { console.error(e); }
-  }, []);
+      if (isOnline) {
+        const res = await api.get(`/inventory/products?search=${encodeURIComponent(q)}&limit=10`);
+        setProducts(res.data.products || []);
+      } else {
+        const cached = await getCachedProducts(q);
+        setProducts(cached.slice(0, 10));
+      }
+    } catch (e) {
+      // Fallback to offline cache
+      try {
+        const cached = await getCachedProducts(q);
+        setProducts(cached.slice(0, 10));
+      } catch { console.error(e); }
+    }
+  }, [isOnline]);
 
   useEffect(() => {
     const timer = setTimeout(() => searchProducts(searchQuery), 300);
@@ -91,6 +125,12 @@ export default function POSPage() {
   };
 
   const removeFromCart = (id) => setCart(cart.filter((c) => c.producto_id !== id));
+
+  const handleBarcodeScan = (code) => {
+    setScannerOpen(false);
+    setSearchQuery(code);
+    toast.success(`Código: ${code}`);
+  };
 
   const subtotalSinIva = cart.reduce((sum, c) => sum + (c.cantidad * c.precio_unitario - c.descuento), 0);
   const totalIva = cart.reduce((sum, c) => {
@@ -202,19 +242,20 @@ export default function POSPage() {
 
       <div data-testid="pos-page" className="flex-1 flex flex-col lg:flex-row">
         <div className="flex-1 p-4 flex flex-col">
-          <div className="relative mb-4">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#A1A1AA]" />
-            <Input
-              ref={searchRef}
-              data-testid="pos-search"
-              placeholder="Buscar producto (nombre, código, código de barras)..."
-              className="pl-9 rounded-none border-[#E4E4E7] h-12 text-base"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              autoFocus
-            />
-            {products.length > 0 && (
-              <div className="absolute top-full left-0 right-0 bg-white border border-[#E4E4E7] border-t-0 z-10 max-h-64 overflow-y-auto shadow-lg">
+          <div className="flex gap-2 mb-4">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#A1A1AA]" />
+              <Input
+                ref={searchRef}
+                data-testid="pos-search"
+                placeholder="Buscar producto (nombre, código, código de barras)..."
+                className="pl-9 rounded-none border-[#E4E4E7] h-12 text-base"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                autoFocus
+              />
+              {products.length > 0 && (
+                <div className="absolute top-full left-0 right-0 bg-white border border-[#E4E4E7] border-t-0 z-10 max-h-64 overflow-y-auto shadow-lg">
                 {products.map((p) => (
                   <button
                     key={p.id}
@@ -231,6 +272,8 @@ export default function POSPage() {
                 ))}
               </div>
             )}
+            </div>
+            <Button data-testid="pos-scan-btn" variant="outline" onClick={() => setScannerOpen(true)} className="rounded-none h-12 px-4"><Camera className="w-5 h-5" /></Button>
           </div>
 
           <div className="flex-1 bg-white border border-[#E4E4E7] overflow-y-auto">
@@ -446,6 +489,8 @@ export default function POSPage() {
           )}
         </DialogContent>
       </Dialog>
+
+      <BarcodeScanner open={scannerOpen} onClose={() => setScannerOpen(false)} onScan={handleBarcodeScan} />
     </div>
   );
 }

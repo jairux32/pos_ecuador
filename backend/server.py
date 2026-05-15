@@ -19,6 +19,8 @@ from routes.inventory_routes import router as inventory_router
 from routes.pos_routes import router as pos_router
 from routes.invoice_routes import router as invoice_router
 from routes.user_routes import router as user_router
+from routes.reports_routes import router as reports_router
+from routes.suppliers_routes import router as suppliers_router
 
 logging.basicConfig(
     level=logging.INFO,
@@ -44,6 +46,8 @@ app.include_router(inventory_router)
 app.include_router(pos_router)
 app.include_router(invoice_router)
 app.include_router(user_router)
+app.include_router(reports_router)
+app.include_router(suppliers_router)
 
 
 @app.get("/api")
@@ -73,6 +77,8 @@ async def startup():
     await db.clients.create_index("business_id")
     await db.login_attempts.create_index("identifier")
     await db.inventory_movements.create_index([("business_id", 1), ("created_at", -1)])
+    await db.suppliers.create_index([("business_id", 1), ("ruc", 1)])
+    await db.purchase_orders.create_index([("business_id", 1), ("created_at", -1)])
 
     admin_email = os.environ.get("ADMIN_EMAIL", "admin@sistema.com")
     admin_password = os.environ.get("ADMIN_PASSWORD", "Admin123!")

@@ -333,3 +333,139 @@ async def upload_product_image(request: Request, file: UploadFile = File(...)):
         return {"path": path}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
+
+
+@router.post("/import-csv")
+async def import_products_csv(request: Request, file: UploadFile = File(...)):
+    user = await get_current_user(request)
+    if user["role"] not in ["superadmin", "administrador", "bodeguero"]:
+        raise HTTPException(status_code=403, detail="No tiene permisos para importar")
+
+    content = await file.read()
+    filename = file.filename or "import"
+
+    imported = 0
+    errors = []
+
+    try:
+        if filename.endswith(".xlsx") or filename.endswith(".xls"):
+            import openpyxl
+            from io import BytesIO
+            wb = openpyxl.load_workbook(BytesIO(content))
+            ws = wb.active
+            rows = list(ws.iter_rows(min_row=2, values_only=True))
+            headers = [str(c.value or "").strip().lower() for c in ws[1]]
+        else:
+            import csv
+            from io import StringIO
+            text = content.decode("utf-8-sig")
+            reader = csv.DictReader(StringIO(text))
+            headers = [h.strip().lower() for h in (reader.fieldnames or [])]
+            rows = None
+            raw_rows = list(reader)
+
+        field_map = {
+            "nombre": ["nombre", "name", "producto", "descripcion"],
+            "codigo_interno": ["codigo_interno", "codigo", "code", "sku"],
+            "codigo_barras": ["codigo_barras", "barcode", "ean"],
+            "precio_costo": ["precio_costo", "costo", "cost", "precio_compra"],
+            "precio_venta": ["precio_venta", "precio", "price", "pvp"],
+            "stock_actual": ["stock_actual", "stock", "cantidad", "qty"],
+            "stock_minimo": ["stock_minimo", "minimo", "min_stock"],
+            "categoria_nombre": ["categoria", "category", "categoria_nombre"],
+            "unidad_medida": ["unidad_medida", "unidad", "unit"],
+            "iva_porcentaje": ["iva_porcentaje", "iva", "tax"],
+        }
+
+        def find_col(field):
+            for alias in field_map.get(field, []):
+                if alias in headers:
+                    return headers.index(alias) if rows is not None else alias
+            return None
+
+        col_indices = {f: find_col(f) for f in field_map}
+        nombre_col = col_indices.get("nombre")
+        if nombre_col is None:
+            raise HTTPException(status_code=400, detail="No se encontró columna 'nombre' en el archivo. Columnas: " + ", ".join(headers))
+
+        data_rows = rows if rows is not None else raw_rows
+
+        for i, row in enumerate(data_rows):
+            try:
+                if rows is not None:
+                    get_val = lambda col: str(row[col]).strip() if col is not None and col < len(row) and row[col] is not None else ""
+                else:
+                    get_val = lambda col: str(row.get(col, "")).strip() if col else ""
+
+                nombre = get_val(col_indices["nombre"])
+                if not nombre:
+                    continue
+
+                def safe_float(col, default=0):
+                    v = get_val(col)
+                    try:
+                        return float(v) if v else default
+                    except (ValueError, TypeError):
+                        return default
+
+                product_doc = {
+                    "id": str(uuid.uuid4()),
+                    "business_id": user["business_id"],
+                    "codigo_interno": get_val(col_indices["codigo_interno"]) or f"IMP-{str(uuid.uuid4())[:8].upper()}",
+                    "codigo_barras": get_val(col_indices["codigo_barras"]),
+                    "nombre": nombre,
+                    "descripcion": "",
+                    "categoria_nombre": get_val(col_indices["categoria_nombre"]) or "General",
+                    "unidad_medida": get_val(col_indices["unidad_medida"]) or "Unidad",
+                    "precio_costo": safe_float(col_indices["precio_costo"]),
+                    "precio_venta": safe_float(col_indices["precio_venta"]),
+                    "iva_porcentaje": safe_float(col_indices["iva_porcentaje"], 15),
+                    "stock_actual": safe_float(col_indices["stock_actual"]),
+                    "stock_minimo": safe_float(col_indices["stock_minimo"]),
+                    "stock_maximo": 1000,
+                    "ubicacion": "",
+                    "proveedor_id": None,
+                    "imagen_path": None,
+                    "is_active": True,
+                    "created_at": datetime.now(timezone.utc).isoformat(),
+                    "updated_at": datetime.now(timezone.utc).isoformat()
+                }
+                await db.products.insert_one(product_doc)
+                imported += 1
+            except Exception as e:
+                errors.append(f"Fila {i + 2}: {str(e)}")
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Error procesando archivo: {str(e)}")
+
+    return {
+        "imported": imported,
+        "errors": errors[:20],
+        "total_errors": len(errors),
+        "message": f"Se importaron {imported} productos" + (f" con {len(errors)} errores" if errors else "")
+    }
+
+
+@router.get("/export-template")
+async def export_template():
+    from openpyxl import Workbook
+    from io import BytesIO
+    from fastapi.responses import Response as FastAPIResponse
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Plantilla Productos"
+    ws.append(["nombre", "codigo_interno", "codigo_barras", "categoria", "unidad_medida", "precio_costo", "precio_venta", "iva_porcentaje", "stock_actual", "stock_minimo"])
+    ws.append(["Arroz 1kg", "ARR-001", "7861234567890", "Alimentos", "Unidad", 0.90, 1.25, 0, 100, 10])
+    ws.append(["Aceite 1L", "ACE-001", "7861234567891", "Alimentos", "Unidad", 2.50, 3.25, 15, 50, 5])
+
+    buf = BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    return FastAPIResponse(
+        content=buf.getvalue(),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": "attachment; filename=plantilla_productos.xlsx"}
+    )

@@ -1,0 +1,50 @@
+{
+  "summary": "Tested 5 new POS Ecuador features: Reports + exports, Suppliers + Purchase Orders + Receive Merchandise, Inventory CSV import + template, Barcode scanner buttons, Navigation. Backend: 24/24 pytest passed (100%). Frontend: All UI elements rendered, data-testids present, integration working. Found 1 minor pre-existing issue (Dialog missing aria-describedby - a11y warning only).",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "GET /api/reports/sales-by-category", "issue": "Performs an N+1 DB lookup per sale item (db.products.find_one inside loop). For large sale volumes this will be slow; recommend batch lookup or store categoria_nombre on the sale item."},
+      {"endpoint": "GET /api/suppliers/purchase-orders & POST /api/suppliers/purchase-orders", "issue": "Same path string with different methods – FastAPI handles ok but POST is declared before GET; consider explicit ordering for clarity."},
+      {"endpoint": "POST /api/suppliers/ (create_supplier)", "issue": "Does NOT call validar_ruc_ecuatoriano even though it is imported. Any 13-char string is accepted as RUC. Frontend also only restricts to digits/length. Recommend validating RUC server-side."},
+      {"endpoint": "POST /api/inventory/import-csv", "issue": "No duplicate-codigo_interno check. Re-importing the same CSV creates duplicate products (only random IMP-xxxx fallback prevents collision when codigo is blank). Recommend upsert by codigo_interno per business_id."},
+      {"endpoint": "POST /api/inventory/import-csv", "issue": "Default IVA fallback is 15% (line 422). Ecuador current default is 15% so OK, but it silently applies when 'iva_porcentaje' missing – worth noting in docs."},
+      {"endpoint": "POST /api/suppliers/receive-merchandise", "issue": "Idempotency: Endpoint can be called multiple times on the same order and will keep adding stock each time. Recommend rejecting if estado=='recibida'."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "All dialogs (Supplier/Order/Receive/Product/Adjust)", "issues": ["DialogContent missing Description/aria-describedby – accessibility warning in console (Radix UI)."]},
+      {"screen": "ReportsPage / SuppliersPage", "issues": ["Date pickers use browser-native <input type=date> instead of shadcn calendar – inconsistent with rest of UI."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_new_features.py",
+    "/app/test_reports/pytest/new_features_results.xml"
+  ],
+  "action_items": [
+    "Server-side validate RUC in POST /api/suppliers (call validar_ruc_ecuatoriano)",
+    "Make POST /api/suppliers/receive-merchandise idempotent (reject if order.estado=='recibida')",
+    "Avoid N+1 in /api/reports/sales-by-category by storing categoria_nombre on sale items or batching",
+    "Handle duplicate codigo_interno during CSV import (upsert or skip-with-error)",
+    "Add aria-describedby to DialogContent components to silence a11y warnings",
+    "(carry-over from iteration_1) PDF invoice 500, CORS wildcard+credentials, soft-delete inconsistency"
+  ],
+  "critical_code_review_comments": [
+    "import-csv parsing logic: 'get_val' lambda captures col_indices via closure; for CSV branch uses 'col' (alias string) but for XLSX uses index. Works but tricky – worth extracting to helper.",
+    "Suppliers create_supplier imports validar_ruc_ecuatoriano but never calls it.",
+    "receive-merchandise lacks idempotency / partial-receive bookkeeping (recibida marks whole order even if only some items received).",
+    "Inventory import-csv default iva_porcentaje=15 hardcoded – ok for Ecuador now but should come from business config.",
+    "Reports export PDF correctly uses bytes(pdf.output()) – fix learned from iteration_1 RCA was applied here, but invoice_routes.py PDF download still suspected broken (per prev iteration).",
+    "ConnectionStatus correctly hides when online & no pending (returns null at line 52)."
+  ],
+  "updated_files": ["/app/backend/tests/test_new_features.py"],
+  "success_rate": {"backend": "100% (24/24)", "frontend": "100% on tested flows"},
+  "test_credentials": "owner@mitienda.com / Owner123! (tenant with business_id, branch + 1 product + 1 sale). admin@sistema.com / Admin123! (superadmin no business).",
+  "seed_data_creation": "Test created suppliers (RUC 1792060346001 'TEST Proveedor Updated'), 1 purchase order (received, stock +5), and 2 products via CSV import (TEST_IMP_A_<unique>, TEST_IMP_B_<unique>) under owner@mitienda.com's business. Stock of first product permanently increased by 5 each test run.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Backend tests in /app/backend/tests/test_new_features.py use module-scoped owner_session fixture (owner@mitienda.com). They mutate state: each run adds +5 to first product stock via receive-merchandise and creates 2 new TEST_IMP_* products. Duplicate-RUC test relies on previous test creating supplier in same session, so order matters. Frontend smoke-tested: navigation, all data-testids resolve, dialogs open, suppliers list populated with backend-created entries.",
+  "rca of the issue": "No new blocking issues found. All 5 new features (Reports, Suppliers/Purchases, CSV Import, Barcode Scan buttons, Sidebar nav) are functional end-to-end. Minor improvements suggested above."
+}

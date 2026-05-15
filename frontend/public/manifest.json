@@ -1,0 +1,18 @@
+{
+  "short_name": "POS Ecuador",
+  "name": "Sistema POS Ecuador - Gestión e Inventario",
+  "description": "Sistema de punto de venta y gestión de inventario para negocios en Ecuador",
+  "icons": [
+    {
+      "src": "favicon.ico",
+      "sizes": "64x64 32x32 24x24 16x16",
+      "type": "image/x-icon"
+    }
+  ],
+  "start_url": ".",
+  "display": "standalone",
+  "theme_color": "#002fa7",
+  "background_color": "#FAFAFA",
+  "orientation": "any",
+  "categories": ["business", "finance", "productivity"]
+}
