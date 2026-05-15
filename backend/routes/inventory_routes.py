@@ -9,6 +9,7 @@ from database import db
 from auth import get_current_user
 from utils.ecuador import UNIDADES_MEDIDA, TASAS_IVA, MOTIVOS_AJUSTE_INVENTARIO
 from utils.storage import upload_file
+from routes.audit_routes import log_audit
 
 router = APIRouter(prefix="/api/inventory", tags=["inventory"])
 
@@ -187,6 +188,7 @@ async def create_product(body: ProductCreate, request: Request):
     })
 
     product_doc.pop("_id", None)
+    await log_audit(user["business_id"], user["_id"], user.get("name",""), "crear_producto", "producto", product_id, f"Producto: {body.nombre}", request.client.host if request.client else "")
     return product_doc
 
 

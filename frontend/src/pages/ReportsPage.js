@@ -8,9 +8,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from ".
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../components/ui/table";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line } from "recharts";
-import { TrendingUp, DollarSign, ShoppingCart, Package, Download, FileText, Calendar } from "lucide-react";
+import { TrendingUp, DollarSign, ShoppingCart, Package, Download, FileText, Calendar, Printer } from "lucide-react";
 import api from "../lib/api";
 import { toast } from "sonner";
+import CashRegisterTicket from "../components/CashRegisterTicket";
 
 const COLORS = ["#002fa7", "#FF3333", "#10B981", "#F59E0B", "#8B5CF6", "#EC4899", "#06B6D4", "#84CC16"];
 
@@ -28,6 +29,7 @@ export default function ReportsPage() {
   const [invSummary, setInvSummary] = useState(null);
   const [cashHistory, setCashHistory] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [ticketRegisterId, setTicketRegisterId] = useState(null);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -271,10 +273,11 @@ export default function ReportsPage() {
                       <TableHead className="text-xs font-bold uppercase text-right">Esperado</TableHead>
                       <TableHead className="text-xs font-bold uppercase text-right">Contado</TableHead>
                       <TableHead className="text-xs font-bold uppercase text-right">Diferencia</TableHead>
+                      <TableHead className="text-xs font-bold uppercase text-center">Ticket</TableHead>
                     </TableRow></TableHeader>
                     <TableBody>
                       {cashHistory.length === 0 ? (
-                        <TableRow><TableCell colSpan={6} className="text-center py-4 text-[#555]">Sin cierres</TableCell></TableRow>
+                        <TableRow><TableCell colSpan={7} className="text-center py-4 text-[#555]">Sin cierres</TableCell></TableRow>
                       ) : cashHistory.map((r) => (
                         <TableRow key={r.id}>
                           <TableCell className="text-sm">{r.closed_at ? new Date(r.closed_at).toLocaleString("es-EC") : "—"}</TableCell>
@@ -285,6 +288,11 @@ export default function ReportsPage() {
                           <TableCell className={`text-sm text-right font-semibold ${(r.diferencia || 0) < 0 ? "text-red-600" : "text-green-600"}`}>
                             ${r.diferencia?.toFixed(2)}
                           </TableCell>
+                          <TableCell className="text-center">
+                            <button data-testid={`print-ticket-${r.id}`} onClick={() => setTicketRegisterId(r.id)} className="p-1.5 hover:bg-[#F4F4F5]" title="Imprimir Ticket">
+                              <Printer className="w-4 h-4 text-[#002fa7]" />
+                            </button>
+                          </TableCell>
                         </TableRow>
                       ))}
                     </TableBody>
@@ -294,6 +302,12 @@ export default function ReportsPage() {
             </TabsContent>
           </Tabs>
         )}
+
+        <CashRegisterTicket
+          registerId={ticketRegisterId}
+          open={!!ticketRegisterId}
+          onClose={() => setTicketRegisterId(null)}
+        />
       </div>
     </Layout>
   );

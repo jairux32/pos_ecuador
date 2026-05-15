@@ -14,6 +14,8 @@ import InvoicesPage from "./pages/InvoicesPage";
 import UsersPage from "./pages/UsersPage";
 import ReportsPage from "./pages/ReportsPage";
 import SuppliersPage from "./pages/SuppliersPage";
+import AuditPage from "./pages/AuditPage";
+import TransfersPage from "./pages/TransfersPage";
 import { setupAutoSync } from "./lib/syncQueue";
 
 function AppRoutes() {
@@ -43,6 +45,8 @@ function AppRoutes() {
       <Route path="/users" element={<ProtectedRoute><UsersPage /></ProtectedRoute>} />
       <Route path="/reports" element={<ProtectedRoute><ReportsPage /></ProtectedRoute>} />
       <Route path="/suppliers" element={<ProtectedRoute><SuppliersPage /></ProtectedRoute>} />
+      <Route path="/audit" element={<ProtectedRoute><AuditPage /></ProtectedRoute>} />
+      <Route path="/transfers" element={<ProtectedRoute><TransfersPage /></ProtectedRoute>} />
       <Route path="*" element={<Navigate to={user ? "/dashboard" : "/login"} replace />} />
     </Routes>
   );

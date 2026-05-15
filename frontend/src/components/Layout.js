@@ -3,7 +3,8 @@ import { useAuth } from "../contexts/AuthContext";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import {
   LayoutDashboard, Package, ShoppingCart, FileText, Users, Settings,
-  LogOut, Menu, X, ChevronDown, AlertTriangle, Store, BarChart3, Truck
+  LogOut, Menu, X, ChevronDown, AlertTriangle, Store, BarChart3, Truck,
+  ScrollText, ArrowRightLeft
 } from "lucide-react";
 import { Button } from "../components/ui/button";
 
@@ -13,7 +14,9 @@ const NAV_ITEMS = [
   { path: "/pos", label: "Punto de Venta", icon: ShoppingCart, roles: ["superadmin", "administrador", "vendedor"] },
   { path: "/invoices", label: "Comprobantes", icon: FileText, roles: ["superadmin", "administrador", "contador"] },
   { path: "/suppliers", label: "Proveedores", icon: Truck, roles: ["superadmin", "administrador", "bodeguero"] },
+  { path: "/transfers", label: "Transferencias", icon: ArrowRightLeft, roles: ["superadmin", "administrador", "bodeguero"] },
   { path: "/reports", label: "Reportes", icon: BarChart3, roles: ["superadmin", "administrador", "contador"] },
+  { path: "/audit", label: "Auditoría", icon: ScrollText, roles: ["superadmin", "administrador", "contador"] },
   { path: "/users", label: "Usuarios", icon: Users, roles: ["superadmin", "administrador"] },
 ];
 

@@ -7,6 +7,7 @@ import uuid
 from database import db
 from auth import get_current_user
 from utils.ecuador import validar_cedula_ecuatoriana, validar_ruc_ecuatoriano
+from routes.audit_routes import log_audit
 
 router = APIRouter(prefix="/api/pos", tags=["pos"])
 
@@ -323,6 +324,7 @@ async def create_sale(body: SaleRequest, request: Request):
             })
 
     sale_doc.pop("_id", None)
+    await log_audit(user["business_id"], user["_id"], user.get("name",""), "crear_venta", "venta", sale_id, f"Total: ${total}", request.client.host if request.client else "")
     return sale_doc
 
 
@@ -402,3 +404,168 @@ async def get_dashboard_stats(request: Request):
         "num_ventas_hoy": num_ventas_hoy,
         "total_clients": total_clients
     }
+
+
+@router.get("/register-ticket/{register_id}")
+async def get_register_ticket(register_id: str, request: Request):
+    """Generate printable ticket data for cash register close."""
+    user = await get_current_user(request)
+    register = await db.cash_registers.find_one(
+        {"id": register_id, "business_id": user["business_id"]}, {"_id": 0}
+    )
+    if not register:
+        raise HTTPException(status_code=404, detail="Registro de caja no encontrado")
+
+    business = await db.businesses.find_one({"id": user["business_id"]}, {"_id": 0})
+    branch = None
+    if register.get("branch_id"):
+        branch = await db.branches.find_one({"id": register["branch_id"]}, {"_id": 0})
+
+    # Get sales for this register period
+    query = {"business_id": user["business_id"], "vendedor_id": register.get("usuario_id")}
+    if register.get("opened_at"):
+        query["created_at"] = {"$gte": register["opened_at"]}
+    if register.get("closed_at"):
+        query.setdefault("created_at", {})["$lte"] = register["closed_at"]
+
+    sales = await db.sales.find(query, {"_id": 0, "id": 1, "total": 1, "pagos": 1, "created_at": 1, "cliente": 1}).to_list(1000)
+
+    esperado = (
+        register.get("monto_inicial", 0)
+        + register.get("ventas_efectivo", 0)
+        + register.get("ingresos_manuales", 0)
+        - register.get("egresos_manuales", 0)
+    )
+
+    return {
+        "negocio": business.get("nombre_comercial", "") if business else "",
+        "ruc": business.get("ruc", "") if business else "",
+        "sucursal": branch.get("nombre", "") if branch else "",
+        "direccion": branch.get("direccion", "") if branch else "",
+        "cajero": register.get("usuario_nombre", ""),
+        "apertura": register.get("opened_at", ""),
+        "cierre": register.get("closed_at", ""),
+        "monto_inicial": register.get("monto_inicial", 0),
+        "ventas_efectivo": register.get("ventas_efectivo", 0),
+        "ventas_tarjeta": register.get("ventas_tarjeta", 0),
+        "ventas_transferencia": register.get("ventas_transferencia", 0),
+        "ingresos_manuales": register.get("ingresos_manuales", 0),
+        "egresos_manuales": register.get("egresos_manuales", 0),
+        "total_ventas": register.get("total_ventas", 0),
+        "num_ventas": register.get("num_ventas", 0),
+        "efectivo_esperado": esperado,
+        "efectivo_contado": register.get("efectivo_contado", 0),
+        "diferencia": register.get("diferencia", 0),
+        "estado": register.get("estado", ""),
+        "notas": register.get("notas", ""),
+        "ventas_detalle": [{
+            "id": s["id"][:8],
+            "total": s.get("total", 0),
+            "cliente": s.get("cliente", {}).get("nombre", "CF"),
+            "hora": s.get("created_at", "")[11:16] if s.get("created_at") else "",
+            "metodos": ", ".join([p.get("metodo", "") for p in s.get("pagos", [])]),
+        } for s in sales]
+    }
+
+
+@router.get("/register-ticket-pdf/{register_id}")
+async def get_register_ticket_pdf(register_id: str, request: Request):
+    """Generate printable PDF ticket (80mm thermal format) for cash register close."""
+    from fastapi.responses import Response as FastAPIResponse
+    from fpdf import FPDF
+
+    user = await get_current_user(request)
+    register = await db.cash_registers.find_one(
+        {"id": register_id, "business_id": user["business_id"]}, {"_id": 0}
+    )
+    if not register:
+        raise HTTPException(status_code=404, detail="Registro no encontrado")
+
+    business = await db.businesses.find_one({"id": user["business_id"]}, {"_id": 0})
+    branch = None
+    if register.get("branch_id"):
+        branch = await db.branches.find_one({"id": register["branch_id"]}, {"_id": 0})
+
+    esperado = (
+        register.get("monto_inicial", 0) + register.get("ventas_efectivo", 0)
+        + register.get("ingresos_manuales", 0) - register.get("egresos_manuales", 0)
+    )
+
+    pdf = FPDF(format=(80, 200))
+    pdf.add_page()
+    pdf.set_auto_page_break(auto=True, margin=5)
+    w = 70  # usable width
+
+    pdf.set_font("Helvetica", "B", 10)
+    pdf.cell(w, 5, business.get("nombre_comercial", "") if business else "", ln=True, align="C")
+    pdf.set_font("Helvetica", "", 7)
+    if business:
+        pdf.cell(w, 4, f"RUC: {business.get('ruc', '')}", ln=True, align="C")
+    if branch:
+        pdf.cell(w, 4, branch.get("nombre", ""), ln=True, align="C")
+        pdf.cell(w, 4, branch.get("direccion", ""), ln=True, align="C")
+
+    pdf.ln(2)
+    pdf.set_font("Helvetica", "B", 9)
+    pdf.cell(w, 5, "CIERRE DE CAJA", ln=True, align="C")
+    pdf.set_font("Helvetica", "", 7)
+    pdf.cell(w, 4, "-" * 40, ln=True, align="C")
+
+    pdf.cell(w, 4, f"Cajero: {register.get('usuario_nombre', '')}", ln=True)
+    if register.get("opened_at"):
+        pdf.cell(w, 4, f"Apertura: {register['opened_at'][:16].replace('T',' ')}", ln=True)
+    if register.get("closed_at"):
+        pdf.cell(w, 4, f"Cierre:   {register['closed_at'][:16].replace('T',' ')}", ln=True)
+
+    pdf.cell(w, 4, "-" * 40, ln=True, align="C")
+    pdf.set_font("Helvetica", "B", 8)
+    pdf.cell(w, 5, "RESUMEN", ln=True)
+    pdf.set_font("Helvetica", "", 7)
+
+    lines = [
+        ("Monto Inicial", register.get("monto_inicial", 0)),
+        ("Ventas Efectivo", register.get("ventas_efectivo", 0)),
+        ("Ventas Tarjeta", register.get("ventas_tarjeta", 0)),
+        ("Ventas Transferencia", register.get("ventas_transferencia", 0)),
+        ("Ingresos Manuales", register.get("ingresos_manuales", 0)),
+        ("Egresos Manuales", register.get("egresos_manuales", 0)),
+    ]
+    for label, val in lines:
+        pdf.cell(w * 0.6, 4, label)
+        pdf.cell(w * 0.4, 4, f"${val:.2f}", align="R", ln=True)
+
+    pdf.cell(w, 4, "-" * 40, ln=True, align="C")
+    pdf.set_font("Helvetica", "B", 8)
+    pdf.cell(w * 0.6, 5, "Total Ventas")
+    pdf.cell(w * 0.4, 5, f"${register.get('total_ventas', 0):.2f}", align="R", ln=True)
+    pdf.cell(w * 0.6, 5, "# Transacciones")
+    pdf.cell(w * 0.4, 5, str(register.get("num_ventas", 0)), align="R", ln=True)
+
+    pdf.cell(w, 4, "-" * 40, ln=True, align="C")
+    pdf.set_font("Helvetica", "B", 8)
+    pdf.cell(w * 0.6, 5, "Efectivo Esperado")
+    pdf.cell(w * 0.4, 5, f"${esperado:.2f}", align="R", ln=True)
+    pdf.cell(w * 0.6, 5, "Efectivo Contado")
+    pdf.cell(w * 0.4, 5, f"${register.get('efectivo_contado', 0):.2f}", align="R", ln=True)
+
+    dif = register.get("diferencia", 0)
+    pdf.set_font("Helvetica", "B", 9)
+    pdf.cell(w * 0.6, 6, "DIFERENCIA")
+    pdf.cell(w * 0.4, 6, f"${dif:.2f}", align="R", ln=True)
+
+    if register.get("notas"):
+        pdf.ln(2)
+        pdf.set_font("Helvetica", "", 7)
+        pdf.cell(w, 4, f"Notas: {register['notas']}", ln=True)
+
+    pdf.ln(3)
+    pdf.set_font("Helvetica", "", 6)
+    pdf.cell(w, 4, "Firma Cajero: ___________________", ln=True, align="C")
+    pdf.ln(2)
+    pdf.cell(w, 4, "Firma Supervisor: ___________________", ln=True, align="C")
+
+    return FastAPIResponse(
+        content=bytes(pdf.output()),
+        media_type="application/pdf",
+        headers={"Content-Disposition": f"attachment; filename=cierre_caja_{register_id[:8]}.pdf"}
+    )
