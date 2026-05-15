@@ -76,11 +76,26 @@ async def sales_by_category(
         query.setdefault("created_at", {})["$lte"] = date_to + "T23:59:59"
 
     sales = await db.sales.find(query, {"_id": 0, "items": 1}).to_list(10000)
+
+    # Pre-fetch all product categories to avoid N+1
+    all_prod_ids = set()
+    for sale in sales:
+        for item in sale.get("items", []):
+            pid = item.get("producto_id")
+            if pid:
+                all_prod_ids.add(pid)
+
+    prod_cats = {}
+    if all_prod_ids:
+        prods = await db.products.find(
+            {"id": {"$in": list(all_prod_ids)}}, {"_id": 0, "id": 1, "categoria_nombre": 1}
+        ).to_list(len(all_prod_ids))
+        prod_cats = {p["id"]: p.get("categoria_nombre", "Sin categoría") for p in prods}
+
     cat_totals = {}
     for sale in sales:
         for item in sale.get("items", []):
-            prod = await db.products.find_one({"id": item.get("producto_id")}, {"_id": 0, "categoria_nombre": 1})
-            cat = prod.get("categoria_nombre", "Sin categoría") if prod else "Sin categoría"
+            cat = prod_cats.get(item.get("producto_id"), "Sin categoría")
             cat_totals.setdefault(cat, {"cantidad": 0, "total": 0})
             cat_totals[cat]["cantidad"] += item.get("cantidad", 0)
             cat_totals[cat]["total"] += item.get("total", 0)

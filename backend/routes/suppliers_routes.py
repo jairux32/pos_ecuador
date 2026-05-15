@@ -80,6 +80,9 @@ async def create_supplier(body: SupplierCreate, request: Request):
     if existing:
         raise HTTPException(status_code=400, detail="Ya existe un proveedor con este RUC")
 
+    if body.ruc and len(body.ruc) == 13 and not validar_ruc_ecuatoriano(body.ruc):
+        raise HTTPException(status_code=400, detail="RUC inválido")
+
     doc = {
         "id": str(uuid.uuid4()),
         "business_id": user["business_id"],
@@ -183,6 +186,8 @@ async def receive_merchandise(body: ReceiveMerchandise, request: Request):
     })
     if not order:
         raise HTTPException(status_code=404, detail="Orden no encontrada")
+    if order.get("estado") == "recibida":
+        raise HTTPException(status_code=400, detail="Esta orden ya fue recibida")
 
     for item in body.items_received:
         pid = item.get("producto_id")
