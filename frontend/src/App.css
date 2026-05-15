@@ -1,34 +1,58 @@
-.App-logo {
-    height: 40vmin;
-    pointer-events: none;
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
+
+* {
+  box-sizing: border-box;
 }
 
-@media (prefers-reduced-motion: no-preference) {
-    .App-logo {
-        animation: App-logo-spin infinite 20s linear;
-    }
+body {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background: #FAFAFA;
+  color: #111111;
 }
 
-.App-header {
-    background-color: #0f0f10;
-    min-height: 100vh;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    font-size: calc(10px + 2vmin);
-    color: white;
+/* POS specific overrides */
+.pos-grid-item {
+  min-height: 100px;
+  touch-action: manipulation;
 }
 
-.App-link {
-    color: #61dafb;
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #FAFAFA;
+}
+::-webkit-scrollbar-thumb {
+  background: #E4E4E7;
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #A1A1AA;
 }
 
-@keyframes App-logo-spin {
-    from {
-        transform: rotate(0deg);
-    }
-    to {
-        transform: rotate(360deg);
-    }
+/* Table density */
+.dense-table td,
+.dense-table th {
+  padding: 6px 12px;
+}
+
+/* Print styles */
+@media print {
+  .no-print { display: none !important; }
+  body { background: white; }
+}
+
+/* Focus styles */
+*:focus-visible {
+  outline: 2px solid #002fa7;
+  outline-offset: 2px;
+}
+
+/* Transitions */
+button, a, input, select {
+  transition: background-color 0.15s ease, border-color 0.15s ease, transform 0.15s ease;
 }
