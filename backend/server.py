@@ -29,17 +29,10 @@ logger = logging.getLogger(__name__)
 app = FastAPI(title="Sistema POS Ecuador", version="1.0.0")
 
 frontend_url = os.environ.get("FRONTEND_URL", "http://localhost:3000")
-cors_origins = os.environ.get("CORS_ORIGINS", "*")
-
-origins = [frontend_url]
-if cors_origins != "*":
-    origins.extend(cors_origins.split(","))
-else:
-    origins = ["*"]
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,
+    allow_origins=[frontend_url],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

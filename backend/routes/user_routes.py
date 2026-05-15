@@ -110,7 +110,7 @@ async def deactivate_user(user_id: str, request: Request):
     if current_user["role"] != "superadmin":
         raise HTTPException(status_code=403, detail="Solo el superadmin puede desactivar usuarios")
 
-    if current_user["_id"] == user_id:
+    if str(current_user["_id"]) == str(user_id):
         raise HTTPException(status_code=400, detail="No puede desactivarse a sí mismo")
 
     result = await db.users.update_one(

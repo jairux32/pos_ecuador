@@ -355,4 +355,4 @@ def generate_ride_pdf(invoice: dict) -> bytes:
     pdf.cell(145, 8, "TOTAL:", align="R")
     pdf.cell(25, 8, f"${invoice.get('total', 0):.2f}", align="R")
 
-    return pdf.output()
+    return bytes(pdf.output())

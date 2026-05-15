@@ -110,7 +110,6 @@ def validar_ruc_ecuatoriano(ruc: str) -> bool:
     if not ruc or len(ruc) != 13 or not ruc.isdigit():
         return False
     if not ruc.endswith("001"):
-        cedula_base = ruc[:10]
         return False
     cedula_base = ruc[:10]
     return validar_cedula_ecuatoriana(cedula_base)

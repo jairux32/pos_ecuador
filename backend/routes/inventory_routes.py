@@ -194,7 +194,7 @@ async def create_product(body: ProductCreate, request: Request):
 async def get_product(product_id: str, request: Request):
     user = await get_current_user(request)
     product = await db.products.find_one(
-        {"id": product_id, "business_id": user["business_id"]}, {"_id": 0}
+        {"id": product_id, "business_id": user["business_id"], "is_active": True}, {"_id": 0}
     )
     if not product:
         raise HTTPException(status_code=404, detail="Producto no encontrado")
