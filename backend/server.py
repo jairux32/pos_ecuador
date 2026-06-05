@@ -116,19 +116,23 @@ async def startup():
         logger.warning(f"Storage init warning: {e}")
 
     import os as _os
-    _os.makedirs("/app/memory", exist_ok=True)
-    with open("/app/memory/test_credentials.md", "w") as f:
-        f.write(f"# Test Credentials\n\n")
-        f.write(f"## Admin Account\n")
-        f.write(f"- Email: {admin_email}\n")
-        f.write(f"- Password: {admin_password}\n")
-        f.write(f"- Role: superadmin\n\n")
-        f.write(f"## Auth Endpoints\n")
-        f.write(f"- POST /api/auth/login\n")
-        f.write(f"- POST /api/auth/register\n")
-        f.write(f"- GET /api/auth/me\n")
-        f.write(f"- POST /api/auth/logout\n")
-        f.write(f"- POST /api/auth/refresh\n")
+    creds_dir = _os.environ.get("CREDENTIALS_DIR", "/app/memory")
+    try:
+        _os.makedirs(creds_dir, exist_ok=True)
+        with open(f"{creds_dir}/test_credentials.md", "w") as f:
+            f.write(f"# Test Credentials\n\n")
+            f.write(f"## Admin Account\n")
+            f.write(f"- Email: {admin_email}\n")
+            f.write(f"- Password: {admin_password}\n")
+            f.write(f"- Role: superadmin\n\n")
+            f.write(f"## Auth Endpoints\n")
+            f.write(f"- POST /api/auth/login\n")
+            f.write(f"- POST /api/auth/register\n")
+            f.write(f"- GET /api/auth/me\n")
+            f.write(f"- POST /api/auth/logout\n")
+            f.write(f"- POST /api/auth/refresh\n")
+    except Exception as e:
+        logger.warning(f"Could not write test credentials file: {e}")
 
     logger.info("POS Ecuador system started successfully")
 

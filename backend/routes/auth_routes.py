@@ -155,7 +155,7 @@ async def register(body: RegisterRequest, response: Response):
 async def me(request: Request):
     user = await get_current_user(request)
     return {
-        "id": user["_id"],
+        "id": user["id"],
         "email": user["email"],
         "name": user.get("name", ""),
         "role": user.get("role", "vendedor"),

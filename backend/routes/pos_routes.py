@@ -72,7 +72,7 @@ async def open_register(body: CashRegisterOpen, request: Request):
     active = await db.cash_registers.find_one({
         "business_id": user["business_id"],
         "branch_id": body.branch_id,
-        "usuario_id": user["_id"],
+        "usuario_id": user["id"],
         "estado": "abierta"
     })
     if active:
@@ -83,7 +83,7 @@ async def open_register(body: CashRegisterOpen, request: Request):
         "id": str(uuid.uuid4()),
         "business_id": user["business_id"],
         "branch_id": body.branch_id,
-        "usuario_id": user["_id"],
+        "usuario_id": user["id"],
         "usuario_nombre": user.get("name", ""),
         "monto_inicial": body.monto_inicial,
         "ventas_efectivo": 0,
@@ -175,7 +175,7 @@ async def get_active_register(request: Request, branch_id: str = ""):
     user = await get_current_user(request)
     query = {
         "business_id": user["business_id"],
-        "usuario_id": user["_id"],
+        "usuario_id": user["id"],
         "estado": "abierta"
     }
     if branch_id:
@@ -248,7 +248,7 @@ async def create_sale(body: SaleRequest, request: Request):
         "id": sale_id,
         "business_id": user["business_id"],
         "branch_id": body.branch_id or (user.get("branch_ids", [None])[0] if user.get("branch_ids") else None),
-        "vendedor_id": user["_id"],
+        "vendedor_id": user["id"],
         "vendedor_nombre": user.get("name", ""),
         "cliente": body.cliente.model_dump(),
         "items": sale_items,
@@ -280,14 +280,14 @@ async def create_sale(body: SaleRequest, request: Request):
             "tipo": "salida",
             "cantidad": item.cantidad,
             "motivo": f"Venta {sale_id[:8]}",
-            "usuario_id": user["_id"],
+            "usuario_id": user["id"],
             "usuario_nombre": user.get("name", ""),
             "created_at": datetime.now(timezone.utc).isoformat()
         })
 
     active_register = await db.cash_registers.find_one({
         "business_id": user["business_id"],
-        "usuario_id": user["_id"],
+        "usuario_id": user["id"],
         "estado": "abierta"
     })
     if active_register:
@@ -338,7 +338,7 @@ async def create_sale(body: SaleRequest, request: Request):
         sale_doc["puntos_usados"] = puntos_usados
 
     sale_doc.pop("_id", None)
-    await log_audit(user["business_id"], user["_id"], user.get("name",""), "crear_venta", "venta", sale_id, f"Total: ${total}", request.client.host if request.client else "")
+    await log_audit(user["business_id"], user["id"], user.get("name",""), "crear_venta", "venta", sale_id, f"Total: ${total}", request.client.host if request.client else "")
     return sale_doc
 
 

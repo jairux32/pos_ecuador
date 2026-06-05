@@ -74,19 +74,22 @@ async def create_supplier(body: SupplierCreate, request: Request):
     if user["role"] not in ["superadmin", "administrador", "bodeguero"]:
         raise HTTPException(status_code=403, detail="No tiene permisos")
 
+    ruc = (body.ruc or "").strip()
+    if not ruc or len(ruc) != 13 or not ruc.isdigit():
+        raise HTTPException(status_code=400, detail="El RUC debe tener 13 dígitos numéricos")
+    if not validar_ruc_ecuatoriano(ruc):
+        raise HTTPException(status_code=400, detail="RUC inválido según formato ecuatoriano")
+
     existing = await db.suppliers.find_one({
-        "business_id": user["business_id"], "ruc": body.ruc
+        "business_id": user["business_id"], "ruc": ruc
     })
     if existing:
         raise HTTPException(status_code=400, detail="Ya existe un proveedor con este RUC")
 
-    if body.ruc and len(body.ruc) == 13 and not validar_ruc_ecuatoriano(body.ruc):
-        raise HTTPException(status_code=400, detail="RUC inválido")
-
     doc = {
         "id": str(uuid.uuid4()),
         "business_id": user["business_id"],
-        "ruc": body.ruc,
+        "ruc": ruc,
         "razon_social": body.razon_social,
         "nombre_comercial": body.nombre_comercial or body.razon_social,
         "contacto_nombre": body.contacto_nombre or "",
@@ -213,7 +216,7 @@ async def receive_merchandise(body: ReceiveMerchandise, request: Request):
             "stock_anterior": old_stock,
             "stock_nuevo": new_stock,
             "motivo": f"Recepción OC {order['id'][:8]}",
-            "usuario_id": user["_id"],
+            "usuario_id": user["id"],
             "usuario_nombre": user.get("name", ""),
             "created_at": datetime.now(timezone.utc).isoformat()
         })

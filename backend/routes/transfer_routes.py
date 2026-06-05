@@ -66,7 +66,7 @@ async def create_transfer(body: TransferCreate, request: Request):
         "stock_anterior": old_stock,
         "stock_nuevo": new_stock,
         "motivo": f"Transferencia a {destino.get('nombre', '')}",
-        "usuario_id": user["_id"],
+        "usuario_id": user["id"],
         "usuario_nombre": user.get("name", ""),
         "created_at": datetime.now(timezone.utc).isoformat()
     })
@@ -82,7 +82,7 @@ async def create_transfer(body: TransferCreate, request: Request):
         "stock_anterior": 0,
         "stock_nuevo": body.cantidad,
         "motivo": f"Transferencia desde {origen.get('nombre', '')}",
-        "usuario_id": user["_id"],
+        "usuario_id": user["id"],
         "usuario_nombre": user.get("name", ""),
         "created_at": datetime.now(timezone.utc).isoformat()
     })
@@ -106,7 +106,7 @@ async def create_transfer(body: TransferCreate, request: Request):
 
     await log_audit(
         business_id=user["business_id"],
-        user_id=user["_id"],
+        user_id=user["id"],
         user_name=user.get("name", ""),
         action="transferir_stock",
         entity_type="inventario",

@@ -3,6 +3,7 @@ from pydantic import BaseModel
 from typing import Optional, List
 from datetime import datetime, timezone
 from bson import ObjectId
+import re
 import uuid
 
 from database import db
@@ -26,6 +27,7 @@ class UserUpdate(BaseModel):
     role: Optional[str] = None
     branch_ids: Optional[List[str]] = None
     is_active: Optional[bool] = None
+    password: Optional[str] = None
 
 
 @router.get("/")
@@ -58,6 +60,11 @@ async def create_user(body: UserCreate, request: Request):
     existing = await db.users.find_one({"email": email})
     if existing:
         raise HTTPException(status_code=400, detail="El email ya está registrado")
+
+    if not body.password or len(body.password) < 8:
+        raise HTTPException(status_code=400, detail="La contraseña debe tener al menos 8 caracteres")
+    if not re.search(r"[A-Z]", body.password) or not re.search(r"[a-z]", body.password) or not re.search(r"[0-9]", body.password):
+        raise HTTPException(status_code=400, detail="La contraseña debe incluir mayúscula, minúscula y número")
 
     hashed = hash_password(body.password)
     user_doc = {
@@ -96,6 +103,14 @@ async def update_user(user_id: str, body: UserUpdate, request: Request):
     if "role" in update_data and update_data["role"] not in VALID_ROLES:
         raise HTTPException(status_code=400, detail="Rol inválido")
 
+    if "password" in update_data:
+        pw = update_data.pop("password")
+        if len(pw) < 8:
+            raise HTTPException(status_code=400, detail="La contraseña debe tener al menos 8 caracteres")
+        if not re.search(r"[A-Z]", pw) or not re.search(r"[a-z]", pw) or not re.search(r"[0-9]", pw):
+            raise HTTPException(status_code=400, detail="La contraseña debe incluir mayúscula, minúscula y número")
+        update_data["password_hash"] = hash_password(pw)
+
     update_data["updated_at"] = datetime.now(timezone.utc).isoformat()
     await db.users.update_one({"_id": ObjectId(user_id)}, {"$set": update_data})
 
@@ -110,8 +125,12 @@ async def deactivate_user(user_id: str, request: Request):
     if current_user["role"] != "superadmin":
         raise HTTPException(status_code=403, detail="Solo el superadmin puede desactivar usuarios")
 
-    if str(current_user["_id"]) == str(user_id):
+    if str(current_user["id"]) == str(user_id):
         raise HTTPException(status_code=400, detail="No puede desactivarse a sí mismo")
+
+    target_user = await db.users.find_one({"_id": ObjectId(user_id)})
+    if not target_user or target_user.get("business_id") != current_user["business_id"]:
+        raise HTTPException(status_code=404, detail="Usuario no encontrado")
 
     result = await db.users.update_one(
         {"_id": ObjectId(user_id), "business_id": current_user["business_id"]},

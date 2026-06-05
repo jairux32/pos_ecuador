@@ -182,13 +182,13 @@ async def create_product(body: ProductCreate, request: Request):
         "stock_anterior": 0,
         "stock_nuevo": body.stock_actual,
         "motivo": "Stock inicial",
-        "usuario_id": user["_id"],
+        "usuario_id": user["id"],
         "usuario_nombre": user.get("name", ""),
         "created_at": datetime.now(timezone.utc).isoformat()
     })
 
     product_doc.pop("_id", None)
-    await log_audit(user["business_id"], user["_id"], user.get("name",""), "crear_producto", "producto", product_id, f"Producto: {body.nombre}", request.client.host if request.client else "")
+    await log_audit(user["business_id"], user["id"], user.get("name",""), "crear_producto", "producto", product_id, f"Producto: {body.nombre}", request.client.host if request.client else "")
     return product_doc
 
 
@@ -196,9 +196,9 @@ async def create_product(body: ProductCreate, request: Request):
 async def get_product(product_id: str, request: Request):
     user = await get_current_user(request)
     product = await db.products.find_one(
-        {"id": product_id, "business_id": user["business_id"], "is_active": True}, {"_id": 0}
+        {"id": product_id, "business_id": user["business_id"]}, {"_id": 0}
     )
-    if not product:
+    if not product or not product.get("is_active", True):
         raise HTTPException(status_code=404, detail="Producto no encontrado")
     return product
 
@@ -222,6 +222,12 @@ async def update_product(product_id: str, body: ProductUpdate, request: Request)
         {"id": product_id}, {"$set": update_data}
     )
     updated = await db.products.find_one({"id": product_id}, {"_id": 0})
+    await log_audit(
+        user["business_id"], user["id"], user.get("name", ""),
+        "editar_producto", "producto", product_id,
+        f"Producto: {updated.get('nombre', '')}",
+        request.client.host if request.client else "",
+    )
     return updated
 
 
@@ -231,12 +237,21 @@ async def delete_product(product_id: str, request: Request):
     if user["role"] not in ["superadmin", "administrador"]:
         raise HTTPException(status_code=403, detail="No tiene permisos para eliminar productos")
 
+    product = await db.products.find_one(
+        {"id": product_id, "business_id": user["business_id"]}
+    )
     result = await db.products.update_one(
         {"id": product_id, "business_id": user["business_id"]},
         {"$set": {"is_active": False, "updated_at": datetime.now(timezone.utc).isoformat()}}
     )
     if result.modified_count == 0:
         raise HTTPException(status_code=404, detail="Producto no encontrado")
+    await log_audit(
+        user["business_id"], user["id"], user.get("name", ""),
+        "eliminar_producto", "producto", product_id,
+        f"Producto: {product.get('nombre', '') if product else product_id}",
+        request.client.host if request.client else "",
+    )
     return {"message": "Producto eliminado"}
 
 
@@ -278,7 +293,7 @@ async def adjust_stock(body: StockAdjustment, request: Request):
         "stock_nuevo": nuevo_stock,
         "motivo": body.motivo,
         "notas": body.notas or "",
-        "usuario_id": user["_id"],
+        "usuario_id": user["id"],
         "usuario_nombre": user.get("name", ""),
         "created_at": datetime.now(timezone.utc).isoformat()
     }
@@ -410,10 +425,23 @@ async def import_products_csv(request: Request, file: UploadFile = File(...)):
                     except (ValueError, TypeError):
                         return default
 
+                codigo_interno = get_val(col_indices["codigo_interno"]) or f"IMP-{str(uuid.uuid4())[:8].upper()}"
+
+                existing = await db.products.find_one({
+                    "business_id": user["business_id"],
+                    "codigo_interno": codigo_interno,
+                    "is_active": True,
+                })
+                if existing:
+                    errors.append(
+                        f"Fila {i + 2}: codigo_interno '{codigo_interno}' ya existe"
+                    )
+                    continue
+
                 product_doc = {
                     "id": str(uuid.uuid4()),
                     "business_id": user["business_id"],
-                    "codigo_interno": get_val(col_indices["codigo_interno"]) or f"IMP-{str(uuid.uuid4())[:8].upper()}",
+                    "codigo_interno": codigo_interno,
                     "codigo_barras": get_val(col_indices["codigo_barras"]),
                     "nombre": nombre,
                     "descripcion": "",

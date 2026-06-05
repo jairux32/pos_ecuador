@@ -4,16 +4,36 @@ import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
-import { Store, ChevronRight, ChevronLeft, Check, Plus, Trash2 } from "lucide-react";
+import { Store, ChevronRight, ChevronLeft, Check, Plus, Trash2, RefreshCw, X } from "lucide-react";
 import api, { formatApiError } from "../lib/api";
 
 const STEPS = ["Datos del Negocio", "Sucursales", "Administrador"];
+
+function generateValidEcuadorCedula() {
+  const nums = [];
+  for (let i = 0; i < 9; i++) nums.push(Math.floor(Math.random() * 10));
+  const coefs = [2, 1, 2, 1, 2, 1, 2, 1, 2];
+  let total = 0;
+  for (let i = 0; i < 9; i++) {
+    let v = nums[i] * coefs[i];
+    if (v >= 10) v -= 9;
+    total += v;
+  }
+  let check = 10 - (total % 10);
+  if (check === 10) check = 0;
+  return nums.join("") + String(check);
+}
+
+function generateValidRuc() {
+  return generateValidEcuadorCedula() + "001";
+}
 
 export default function SetupWizard() {
   const navigate = useNavigate();
   const [step, setStep] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [rucStatus, setRucStatus] = useState("");
 
   const [provinces, setProvinces] = useState({});
   const [sectors, setSectors] = useState([]);
@@ -46,27 +66,40 @@ export default function SetupWizard() {
         setRegimes(rRes.data.regimes);
       } catch (e) {
         console.error("Error loading config", e);
+        setError("No se pudieron cargar las opciones de provincia. Verifica tu conexión y recarga la página.");
       }
     };
     load();
   }, []);
 
+  useEffect(() => {
+    const ruc = business.ruc.trim();
+    if (ruc.length === 0) { setRucStatus(""); return; }
+    if (!/^\d+$/.test(ruc)) { setRucStatus("Solo dígitos"); return; }
+    if (ruc.length < 13) { setRucStatus(`${ruc.length}/13 dígitos`); return; }
+    if (ruc.length > 13) { setRucStatus("Máximo 13 dígitos"); return; }
+    setRucStatus("OK");
+  }, [business.ruc]);
+
   const updateBranch = (idx, field, value) => {
-    const updated = [...branches];
-    updated[idx] = { ...updated[idx], [field]: value };
-    setBranches(updated);
+    setBranches((prev) => prev.map((b, i) => i === idx ? { ...b, [field]: value } : b));
   };
 
   const addBranch = () => {
-    setBranches([...branches, {
+    setBranches((prev) => [...prev, {
       nombre: "", provincia: "", canton: "", direccion: "",
-      telefono: "", codigo_establecimiento: String(branches.length + 1).padStart(3, "0"), punto_emision: "001",
+      telefono: "", codigo_establecimiento: String(prev.length + 1).padStart(3, "0"),
+      punto_emision: "001",
     }]);
   };
 
   const removeBranch = (idx) => {
     if (branches.length <= 1) return;
-    setBranches(branches.filter((_, i) => i !== idx));
+    setBranches((prev) => prev.filter((_, i) => i !== idx));
+  };
+
+  const generateRuc = () => {
+    setBusiness((prev) => ({ ...prev, ruc: generateValidRuc() }));
   };
 
   const validateStep = () => {
@@ -76,14 +109,15 @@ export default function SetupWizard() {
         setError("Complete todos los campos obligatorios");
         return false;
       }
-      if (business.ruc.length !== 13) {
-        setError("El RUC debe tener 13 dígitos");
+      if (business.ruc.length !== 13 || !/^\d{13}$/.test(business.ruc)) {
+        setError("El RUC debe tener 13 dígitos numéricos");
         return false;
       }
     } else if (step === 1) {
-      for (const b of branches) {
+      for (let i = 0; i < branches.length; i++) {
+        const b = branches[i];
         if (!b.nombre || !b.provincia || !b.canton || !b.direccion) {
-          setError("Complete todos los campos de cada sucursal");
+          setError(`Complete todos los campos de la sucursal ${i + 1}`);
           return false;
         }
       }
@@ -105,7 +139,7 @@ export default function SetupWizard() {
   };
 
   const handleNext = () => {
-    if (validateStep()) setStep(step + 1);
+    if (validateStep()) setStep((s) => s + 1);
   };
 
   const handleSubmit = async () => {
@@ -113,7 +147,7 @@ export default function SetupWizard() {
     setLoading(true);
     setError("");
     try {
-      const res = await api.post("/business/setup", {
+      await api.post("/business/setup", {
         business,
         branches,
         admin_email: admin.email,
@@ -131,6 +165,8 @@ export default function SetupWizard() {
       setLoading(false);
     }
   };
+
+  const provincesLoaded = Object.keys(provinces).length > 0;
 
   return (
     <div className="min-h-screen bg-[#FAFAFA] flex items-center justify-center p-4">
@@ -161,6 +197,11 @@ export default function SetupWizard() {
         <div className="p-6">
           {step === 0 && (
             <div data-testid="setup-step-business" className="space-y-4">
+              {!provincesLoaded && (
+                <div className="p-3 bg-amber-50 border border-amber-200 text-amber-800 text-sm">
+                  Cargando opciones... Si este mensaje persiste, verifica la conexión con el backend.
+                </div>
+              )}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <Label className="text-sm font-semibold text-[#111]">Nombre Comercial *</Label>
@@ -171,15 +212,40 @@ export default function SetupWizard() {
                   <Input data-testid="business-razon-input" className="mt-1 rounded-none border-[#E4E4E7]" value={business.razon_social} onChange={(e) => setBusiness({ ...business, razon_social: e.target.value })} placeholder="Mi Tienda S.A." />
                 </div>
               </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <Label className="text-sm font-semibold text-[#111]">RUC *</Label>
-                  <Input data-testid="business-ruc-input" className="mt-1 rounded-none border-[#E4E4E7]" value={business.ruc} onChange={(e) => setBusiness({ ...business, ruc: e.target.value.replace(/\D/g, "").slice(0, 13) })} placeholder="1234567890001" maxLength={13} />
+              <div>
+                <Label className="text-sm font-semibold text-[#111]">RUC *</Label>
+                <div className="flex gap-2 mt-1">
+                  <Input
+                    data-testid="business-ruc-input"
+                    className={`rounded-none border-[#E4E4E7] ${rucStatus === "OK" ? "border-green-500" : rucStatus && rucStatus !== "" ? "border-red-400" : ""}`}
+                    value={business.ruc}
+                    onChange={(e) => setBusiness({ ...business, ruc: e.target.value.replace(/\D/g, "").slice(0, 13) })}
+                    placeholder="1234567890001"
+                    maxLength={13}
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={generateRuc}
+                    title="Generar un RUC ecuatoriano válido de prueba"
+                    className="rounded-none border-[#E4E4E7] text-xs whitespace-nowrap gap-1"
+                  >
+                    <RefreshCw className="w-3 h-3" /> Generar
+                  </Button>
                 </div>
+                {rucStatus && (
+                  <p className={`text-xs mt-1 ${rucStatus === "OK" ? "text-green-700" : "text-amber-700"}`}>
+                    {rucStatus === "OK" ? "✓ RUC con 13 dígitos. La validación final la hace el backend." : rucStatus}
+                  </p>
+                )}
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <Label className="text-sm font-semibold text-[#111]">Sector *</Label>
                   <Select value={business.sector} onValueChange={(v) => setBusiness({ ...business, sector: v })}>
-                    <SelectTrigger data-testid="business-sector-select" className="mt-1 rounded-none border-[#E4E4E7]"><SelectValue placeholder="Seleccione" /></SelectTrigger>
+                    <SelectTrigger data-testid="business-sector-select" className="mt-1 rounded-none border-[#E4E4E7]">
+                      <SelectValue placeholder="Seleccione" />
+                    </SelectTrigger>
                     <SelectContent>
                       {sectors.map((s) => (<SelectItem key={s} value={s}>{s}</SelectItem>))}
                     </SelectContent>
@@ -188,12 +254,14 @@ export default function SetupWizard() {
               </div>
               <div>
                 <Label className="text-sm font-semibold text-[#111]">Dirección Matriz</Label>
-                <Input className="mt-1 rounded-none border-[#E4E4E7]" value={business.direccion_matriz} onChange={(e) => setBusiness({ ...business, direccion_matriz: e.target.value })} placeholder="Av. Principal 123" />
+                <Input className="mt-1 rounded-none border-[#E4E4E7]" value={business.direccion_matriz} onChange={(e) => setBusiness({ ...business, direccion_matriz: e.target.value })} placeholder="Av. Principal 123 y Secundaria" />
               </div>
               <div>
                 <Label className="text-sm font-semibold text-[#111]">Régimen Tributario *</Label>
                 <Select value={business.regimen_tributario} onValueChange={(v) => setBusiness({ ...business, regimen_tributario: v })}>
-                  <SelectTrigger data-testid="business-regime-select" className="mt-1 rounded-none border-[#E4E4E7]"><SelectValue placeholder="Seleccione" /></SelectTrigger>
+                  <SelectTrigger data-testid="business-regime-select" className="mt-1 rounded-none border-[#E4E4E7]">
+                    <SelectValue placeholder="Seleccione" />
+                  </SelectTrigger>
                   <SelectContent>
                     {regimes.map((r) => (<SelectItem key={r} value={r}>{r}</SelectItem>))}
                   </SelectContent>
@@ -204,6 +272,11 @@ export default function SetupWizard() {
 
           {step === 1 && (
             <div data-testid="setup-step-branches" className="space-y-6">
+              {!provincesLoaded && (
+                <div className="p-3 bg-amber-50 border border-amber-200 text-amber-800 text-sm">
+                  Cargando provincias... Si este mensaje persiste, recarga la página.
+                </div>
+              )}
               {branches.map((branch, idx) => (
                 <div key={idx} className="border border-[#E4E4E7] p-4 relative">
                   <div className="flex items-center justify-between mb-3">
@@ -215,29 +288,55 @@ export default function SetupWizard() {
                     )}
                   </div>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    <div>
+                    <div className="md:col-span-2">
                       <Label className="text-xs font-semibold">Nombre *</Label>
                       <Input className="mt-1 rounded-none border-[#E4E4E7] text-sm" value={branch.nombre} onChange={(e) => updateBranch(idx, "nombre", e.target.value)} placeholder="Local Principal" />
                     </div>
                     <div>
                       <Label className="text-xs font-semibold">Provincia *</Label>
-                      <Select value={branch.provincia} onValueChange={(v) => { updateBranch(idx, "provincia", v); updateBranch(idx, "canton", ""); }}>
-                        <SelectTrigger className="mt-1 rounded-none border-[#E4E4E7] text-sm"><SelectValue placeholder="Seleccione" /></SelectTrigger>
-                        <SelectContent>
-                          {Object.keys(provinces).map((p) => (<SelectItem key={p} value={p}>{p}</SelectItem>))}
-                        </SelectContent>
-                      </Select>
+                      {provincesLoaded ? (
+                        <Select
+                          value={branch.provincia}
+                          onValueChange={(v) => { updateBranch(idx, "provincia", v); updateBranch(idx, "canton", ""); }}
+                        >
+                          <SelectTrigger className="mt-1 rounded-none border-[#E4E4E7] text-sm" data-testid={`branch-${idx}-provincia`}>
+                            <SelectValue placeholder="Seleccione provincia" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {Object.keys(provinces).map((p) => (
+                              <SelectItem key={p} value={p}>{p}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      ) : (
+                        <Input className="mt-1 rounded-none border-[#E4E4E7] text-sm bg-gray-50" disabled value="Cargando..." />
+                      )}
                     </div>
                     <div>
                       <Label className="text-xs font-semibold">Cantón *</Label>
-                      <Select value={branch.canton} onValueChange={(v) => updateBranch(idx, "canton", v)} disabled={!branch.provincia}>
-                        <SelectTrigger className="mt-1 rounded-none border-[#E4E4E7] text-sm"><SelectValue placeholder="Seleccione" /></SelectTrigger>
-                        <SelectContent>
-                          {(provinces[branch.provincia] || []).map((c) => (<SelectItem key={c} value={c}>{c}</SelectItem>))}
-                        </SelectContent>
-                      </Select>
+                      {provincesLoaded && branch.provincia ? (
+                        <Select
+                          value={branch.canton}
+                          onValueChange={(v) => updateBranch(idx, "canton", v)}
+                        >
+                          <SelectTrigger className="mt-1 rounded-none border-[#E4E4E7] text-sm" data-testid={`branch-${idx}-canton`}>
+                            <SelectValue placeholder="Seleccione cantón" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {(provinces[branch.provincia] || []).map((c) => (
+                              <SelectItem key={c} value={c}>{c}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      ) : (
+                        <Input
+                          className="mt-1 rounded-none border-[#E4E4E7] text-sm bg-gray-50"
+                          disabled
+                          value={branch.provincia ? "Seleccione provincia primero" : "Cargando..."}
+                        />
+                      )}
                     </div>
-                    <div>
+                    <div className="md:col-span-2">
                       <Label className="text-xs font-semibold">Dirección *</Label>
                       <Input className="mt-1 rounded-none border-[#E4E4E7] text-sm" value={branch.direccion} onChange={(e) => updateBranch(idx, "direccion", e.target.value)} placeholder="Calle y número" />
                     </div>

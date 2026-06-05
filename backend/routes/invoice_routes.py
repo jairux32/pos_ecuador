@@ -163,6 +163,18 @@ async def annul_invoice(body: InvoiceAnul, request: Request):
     )
     if result.modified_count == 0:
         raise HTTPException(status_code=404, detail="Comprobante no encontrado o ya anulado")
+
+    await db.audit_logs.insert_one({
+        "business_id": user["business_id"],
+        "user_id": user["id"],
+        "user_name": user.get("name", ""),
+        "action": "anular_comprobante",
+        "entity_type": "comprobante",
+        "entity_id": body.invoice_id,
+        "details": body.motivo,
+        "ip": request.client.host if request.client else "",
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    })
     return {"message": "Comprobante anulado"}
 
 
@@ -280,6 +292,25 @@ def generate_sri_xml(invoice: dict) -> str:
     return xml
 
 
+def _safe_pdf_text(value) -> str:
+    """Sanitize text for fpdf2 core fonts (latin-1). Replaces unsupported chars."""
+    if value is None:
+        return ""
+    s = str(value)
+    replacements = {
+        "ñ": "n", "Ñ": "N", "á": "a", "Á": "A", "é": "e", "É": "E",
+        "í": "i", "Í": "I", "ó": "o", "Ó": "O", "ú": "u", "Ú": "U",
+        "ü": "u", "Ü": "U", "°": "o", "—": "-", "–": "-",
+    }
+    for k, v in replacements.items():
+        s = s.replace(k, v)
+    try:
+        s.encode("latin-1")
+    except UnicodeEncodeError:
+        s = s.encode("latin-1", "replace").decode("latin-1")
+    return s
+
+
 def generate_ride_pdf(invoice: dict) -> bytes:
     from fpdf import FPDF
 
@@ -292,11 +323,11 @@ def generate_ride_pdf(invoice: dict) -> bytes:
     items = invoice.get("items", [])
 
     pdf.set_font("Helvetica", "B", 14)
-    pdf.cell(0, 10, emisor.get("nombre_comercial", ""), ln=True, align="C")
+    pdf.cell(0, 10, _safe_pdf_text(emisor.get("nombre_comercial", "")), ln=True, align="C")
     pdf.set_font("Helvetica", "", 10)
-    pdf.cell(0, 6, emisor.get("razon_social", ""), ln=True, align="C")
+    pdf.cell(0, 6, _safe_pdf_text(emisor.get("razon_social", "")), ln=True, align="C")
     pdf.cell(0, 6, f"RUC: {emisor.get('ruc', '')}", ln=True, align="C")
-    pdf.cell(0, 6, emisor.get("direccion", ""), ln=True, align="C")
+    pdf.cell(0, 6, _safe_pdf_text(emisor.get("direccion", "")), ln=True, align="C")
     pdf.ln(5)
 
     tipo_nombre = invoice.get("tipo_documento_nombre", "Factura")
@@ -310,7 +341,7 @@ def generate_ride_pdf(invoice: dict) -> bytes:
     pdf.set_font("Helvetica", "B", 9)
     pdf.cell(0, 6, "DATOS DEL CLIENTE", ln=True)
     pdf.set_font("Helvetica", "", 9)
-    pdf.cell(0, 5, f"Nombre: {comprador.get('nombre', 'Consumidor Final')}", ln=True)
+    pdf.cell(0, 5, f"Nombre: {_safe_pdf_text(comprador.get('nombre', 'Consumidor Final'))}", ln=True)
     pdf.cell(0, 5, f"Identificacion: {comprador.get('identificacion', '9999999999999')}", ln=True)
     pdf.ln(5)
 
@@ -325,7 +356,7 @@ def generate_ride_pdf(invoice: dict) -> bytes:
 
     pdf.set_font("Helvetica", "", 8)
     for item in items:
-        nombre = item.get("nombre", "")[:40]
+        nombre = _safe_pdf_text(item.get("nombre", ""))[:40]
         pdf.cell(80, 6, nombre, border=1)
         pdf.cell(20, 6, f"{item.get('cantidad', 0)}", border=1, align="C")
         pdf.cell(25, 6, f"${item.get('precio_unitario', 0):.2f}", border=1, align="C")

@@ -7,31 +7,16 @@ export default function BarcodeScanner({ open, onClose, onScan }) {
   const scannerRef = useRef(null);
   const [error, setError] = useState("");
   const html5QrCodeRef = useRef(null);
+  const onScanRef = useRef(onScan);
+  const onCloseRef = useRef(onClose);
+
+  useEffect(() => {
+    onScanRef.current = onScan;
+    onCloseRef.current = onClose;
+  }, [onScan, onClose]);
 
   useEffect(() => {
     if (!open) return;
-    let scanner = null;
-
-    const startScanner = async () => {
-      try {
-        const { Html5Qrcode } = await import("html5-qrcode");
-        scanner = new Html5Qrcode("barcode-reader");
-        html5QrCodeRef.current = scanner;
-
-        await scanner.start(
-          { facingMode: "environment" },
-          { fps: 10, qrbox: { width: 250, height: 150 }, aspectRatio: 1.5 },
-          (decodedText) => {
-            onScan(decodedText);
-            stopScanner();
-          },
-          () => {}
-        );
-      } catch (err) {
-        setError("No se pudo acceder a la cámara. Verifique los permisos.");
-        console.error("Scanner error:", err);
-      }
-    };
 
     const stopScanner = async () => {
       if (html5QrCodeRef.current) {
@@ -43,13 +28,34 @@ export default function BarcodeScanner({ open, onClose, onScan }) {
       }
     };
 
+    const startScanner = async () => {
+      try {
+        const { Html5Qrcode } = await import("html5-qrcode");
+        const scanner = new Html5Qrcode("barcode-reader");
+        html5QrCodeRef.current = scanner;
+
+        await scanner.start(
+          { facingMode: "environment" },
+          { fps: 10, qrbox: { width: 250, height: 150 }, aspectRatio: 1.5 },
+          (decodedText) => {
+            stopScanner();
+            onScanRef.current?.(decodedText);
+          },
+          () => {}
+        );
+      } catch (err) {
+        setError("No se pudo acceder a la cámara. Verifique los permisos.");
+        console.error("Scanner error:", err);
+      }
+    };
+
     const timer = setTimeout(startScanner, 300);
 
     return () => {
       clearTimeout(timer);
       stopScanner();
     };
-  }, [open, onScan]);
+  }, [open]);
 
   const handleClose = async () => {
     if (html5QrCodeRef.current) {
@@ -60,7 +66,7 @@ export default function BarcodeScanner({ open, onClose, onScan }) {
       html5QrCodeRef.current = null;
     }
     setError("");
-    onClose();
+    onCloseRef.current?.();
   };
 
   return (

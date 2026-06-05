@@ -1,6 +1,11 @@
 import axios from "axios";
 
-const API_URL = process.env.REACT_APP_BACKEND_URL;
+// In dev with the standalone proxy (frontend/dev-proxy.js), /api requests are
+// proxied to the backend so cookies stay same-origin (avoids Firefox SameSite
+// cookie blocking). We therefore use a relative baseURL by default so the
+// proxy works without extra env vars. Set REACT_APP_BACKEND_URL to override
+// (e.g. for pointing at a remote backend in production builds).
+const API_URL = process.env.REACT_APP_BACKEND_URL || "";
 
 const api = axios.create({
   baseURL: `${API_URL}/api`,
