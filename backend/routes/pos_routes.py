@@ -306,10 +306,15 @@ async def create_sale(body: SaleRequest, request: Request):
         )
 
     if body.cliente.identificacion and body.cliente.tipo_identificacion != "consumidor_final":
+        puntos_ganados = int(total) # 1 punto por cada dólar
         existing_client = await db.clients.find_one({
             "business_id": user["business_id"],
             "identificacion": body.cliente.identificacion
         })
+
+        # Deduct points if used as a payment method
+        puntos_usados = sum(p.monto for p in body.pagos if p.metodo == "puntos")
+
         if not existing_client:
             await db.clients.insert_one({
                 "id": str(uuid.uuid4()),
@@ -320,8 +325,17 @@ async def create_sale(body: SaleRequest, request: Request):
                 "email": body.cliente.email or "",
                 "telefono": body.cliente.telefono or "",
                 "direccion": body.cliente.direccion or "",
+                "puntos": puntos_ganados - puntos_usados,
                 "created_at": datetime.now(timezone.utc).isoformat()
             })
+        else:
+            await db.clients.update_one(
+                {"_id": existing_client["_id"]},
+                {"$inc": {"puntos": puntos_ganados - puntos_usados}}
+            )
+
+        sale_doc["puntos_ganados"] = puntos_ganados
+        sale_doc["puntos_usados"] = puntos_usados
 
     sale_doc.pop("_id", None)
     await log_audit(user["business_id"], user["_id"], user.get("name",""), "crear_venta", "venta", sale_id, f"Total: ${total}", request.client.host if request.client else "")
