@@ -34,9 +34,18 @@ app = FastAPI(title="Sistema POS Ecuador", version="1.0.0")
 
 frontend_url = os.environ.get("FRONTEND_URL", "http://localhost:3000")
 
+# Allow multiple origins for local network access
+allowed_origins = [
+    frontend_url,
+    "http://localhost:3000",
+    "http://localhost:3001",
+    "http://192.168.1.36:3000",
+    "http://192.168.1.36:3001",
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[frontend_url],
+    allow_origins=allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
